@@ -31,7 +31,8 @@ var (
 	defaultConnectBackAddress = ""
 )
 
-func main() {
+// The c-archive build mode requires exactly one main() in the package.
+func cliMain() {
 	err := run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
